@@ -8,6 +8,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         /* Custom font and base styles */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
         body {
             font-family: 'Inter', sans-serif;
             background-color: #f7f9fb;
@@ -145,7 +146,7 @@
 
                     <button type="submit" id="saveButton" class="w-full bg-blue-600 text-white p-3 rounded-lg font-semibold hover:bg-blue-700 transition duration-150 focus:outline-none focus:ring-4 focus:ring-blue-300 disabled:opacity-50" disabled>
                         <span id="buttonText">Save Transaction & Print Receipt</span>
-                        <svg id="spinner" class="animate-spin -ml-1 mr-3 h-5 w-5 text-white hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <svg id="spinner" class="animate-spin -ml-1 mr-3 h-5 w-5 text-white hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
@@ -206,7 +207,7 @@
 
     <!-- Local Storage Logic -->
     <script>
-        // UI elements
+        // UI elements (UI ke elements)
         const loadingIndicator = document.getElementById('loadingIndicator');
         const mainContent = document.getElementById('mainContent');
         const recordForm = document.getElementById('recordForm');
@@ -227,15 +228,15 @@
         const addItemButton = document.getElementById('addItemButton');
         const transactionTypeInputs = document.querySelectorAll('input[name="transactionType"]');
         
-        // Expense Fields
+        // Expense Fields (Expense ke fields)
         const revenueFields = document.getElementById('revenueFields');
         const expenseFields = document.getElementById('expenseFields');
         const expenseCategory = document.getElementById('expenseCategory');
         const expenseDescription = document.getElementById('expenseDescription');
         const expenseAmount = document.getElementById('expenseAmount');
         
-        const LOCAL_STORAGE_KEY = 'shop_multi_item_records_data_v2'; // Updated key for new data structure
-        let itemIdCounter = 0; // Counter for unique item IDs within the current form
+        const LOCAL_STORAGE_KEY = 'shop_multi_item_records_data_v2'; 
+        let itemIdCounter = 0; 
 
         const SERVICE_OPTIONS = [
             "Photocopy (B/W)",
@@ -304,8 +305,8 @@
                 totalLabel.textContent = 'Grand Total Cost:';
                 totalCostDisplay.classList.remove('text-red-600');
                 totalCostDisplay.classList.add('text-blue-600');
-                buttonText.textContent = 'Save Revenue & Print Receipt';
-                // Trigger revenue calculation
+                buttonText.textContent = 'Save Transaction & Print Receipt';
+                // Trigger revenue calculation/validation
                 calculateGrandTotal(); 
             } else {
                 totalDisplayCard.classList.remove('bg-blue-50', 'border-blue-200');
@@ -315,7 +316,7 @@
                 totalCostDisplay.classList.add('text-red-600');
                 buttonText.textContent = 'Save Expense';
                 // Trigger expense calculation/validation
-                handleExpenseFormUpdate();
+                handleExpenseFormUpdate(); // Ensure validation runs on switch
             }
         }
         
@@ -333,8 +334,10 @@
             const priceInput = itemEl.querySelector('.item-price');
             const totalDisplay = itemEl.querySelector('.item-total-display');
 
-            const qty = parseFloat(quantityInput.value) || 0;
-            const price = parseFloat(priceInput.value) || 0;
+            // Use Math.max(0, ...) to ensure no negative values from inputs
+            // If priceInput.value is empty, parseFloat will return NaN, which gets coerced to 0 by || 0
+            const qty = Math.max(0, parseFloat(quantityInput.value) || 0);
+            const price = Math.max(0, parseFloat(priceInput.value) || 0);
             const total = qty * price;
 
             totalDisplay.textContent = formatCurrency(total);
@@ -343,11 +346,17 @@
 
         /**
          * Calculates the Grand Total from all item rows and updates the display/button state.
+         * FIX: Ensures every required field is validated for all items, including the select value.
          */
         function calculateGrandTotal() {
             const itemRows = itemsContainer.querySelectorAll('.item-row');
             let grandTotal = 0;
-            let isValid = itemRows.length > 0;
+            let allItemsValid = true; // Flag for strict validation
+            
+            // Validation fails if there are no items
+            if (itemRows.length === 0) {
+                 allItemsValid = false;
+            }
 
             itemRows.forEach(row => {
                 const itemTotal = calculateItemTotal(row);
@@ -356,17 +365,30 @@
                 // Check validity for form submission
                 const quantityInput = row.querySelector('.item-quantity');
                 const priceInput = row.querySelector('.item-price');
-                const typeSelect = row.querySelector('.item-type');
-
-                if (!typeSelect.value || !quantityInput.value || !priceInput.value || itemTotal <= 0) {
-                    isValid = false;
+                const typeSelect = row.querySelector('.item-type'); // Select element
+                
+                // Get parsed values, ensuring they are valid numbers
+                const qtyVal = parseFloat(quantityInput.value) || 0;
+                const priceVal = parseFloat(priceInput.value) || 0;
+                
+                // An item is invalid if: 
+                // 1. Service type is not selected (typeSelect.value will be empty string if the "disabled selected" option is active)
+                // 2. Quantity is zero or negative (or not a number)
+                // 3. Price is zero or negative (or not a number)
+                if (!typeSelect.value || qtyVal <= 0 || priceVal <= 0 || itemTotal <= 0) {
+                    allItemsValid = false;
+                    row.classList.add('border-red-400'); // Optional: visually mark invalid rows
+                } else {
+                    row.classList.remove('border-red-400');
                 }
             });
 
             totalCostDisplay.textContent = formatCurrency(grandTotal);
             
-            // The button is enabled only if Revenue is selected, there is at least one valid item row, and the total > 0
-            saveButton.disabled = !isValid || grandTotal <= 0;
+            // The button is enabled only if Revenue is selected, all items are valid, and the total > 0
+            const isRevenueSelected = document.querySelector('input[name="transactionType"]:checked').value === 'Revenue';
+            const shouldDisable = !isRevenueSelected || !allItemsValid || grandTotal <= 0;
+            saveButton.disabled = shouldDisable;
         }
 
         /**
@@ -411,7 +433,7 @@
                     <!-- Price Per Unit -->
                     <div class="md:col-span-1">
                         <label class="block text-xs font-medium text-gray-500 mb-1">Rate</label>
-                        <input type="number" min="0" value="0" step="any" required class="item-price input-style w-full p-2 border border-gray-300 rounded-lg text-sm focus:outline-none">
+                        <input type="number" min="0.01" value="" step="any" required class="item-price input-style w-full p-2 border border-gray-300 rounded-lg text-sm focus:outline-none" placeholder="0.00">
                     </div>
 
                     <!-- Item Total -->
@@ -427,6 +449,7 @@
             // Add event listeners for calculation and removal
             itemDiv.querySelectorAll('input, select').forEach(input => {
                 input.addEventListener('input', calculateGrandTotal);
+                input.addEventListener('change', calculateGrandTotal); // Add change listener for select
             });
             itemDiv.querySelector('.remove-item-btn').addEventListener('click', removeItemRow);
 
@@ -450,16 +473,28 @@
 
         // --- Expense Logic ---
 
+        /**
+         * Handles expense form input changes and updates the button state.
+         * FIX: Ensures button state is immediately updated based on all three required fields.
+         */
         function handleExpenseFormUpdate() {
+            // Amount must be > 0
             const amount = parseFloat(expenseAmount.value) || 0;
+            // Category must be selected (non-empty string)
             const category = expenseCategory.value;
+            // Description must be non-empty string after trimming whitespace
             const description = expenseDescription.value.trim();
             
             totalCostDisplay.textContent = formatCurrency(amount);
 
             // Expense is valid if amount > 0 and a category and description are provided
-            const isValid = amount > 0 && category && description;
-            saveButton.disabled = !isValid;
+            const isValid = amount > 0 && !!category && !!description;
+
+            // Only update the button if Expense tab is currently active
+            const isExpenseSelected = document.querySelector('input[name="transactionType"]:checked').value === 'Expense';
+            if (isExpenseSelected) {
+                saveButton.disabled = !isValid;
+            }
         }
 
         // Add listeners for expense fields
@@ -653,7 +688,7 @@
             loadingIndicator.classList.add('hidden');
             mainContent.classList.remove('hidden');
             
-            // Initialize form to correct state
+            // Initialize form to correct state (this also runs the initial validation check)
             toggleFormFields(document.querySelector('input[name="transactionType"]:checked').value);
         }
 
@@ -742,18 +777,21 @@
 
             const transactionType = document.querySelector('input[name="transactionType"]:checked').value;
             let newRecord = null;
-            let isValid = true;
+            let isValid = true; // Overall form validity check
+            let validationMessage = '';
 
             // --- REVENUE LOGIC ---
             if (transactionType === 'Revenue') {
-                const grandTotal = parseFloat(totalCostDisplay.textContent);
+                calculateGrandTotal(); // Re-run validation one last time
                 
-                if (grandTotal <= 0) {
-                    showFeedback('Grand Total must be greater than 0.', 'error');
+                // Use the current button status which is set by calculateGrandTotal
+                if (saveButton.disabled) {
+                    validationMessage = 'Please ensure all Revenue items have a selected Service, Quantity (> 0), and Rate (> 0). Grand Total must be positive.';
                     isValid = false;
                 } else {
                     const itemRows = itemsContainer.querySelectorAll('.item-row');
                     const items = [];
+                    const grandTotal = parseFloat(totalCostDisplay.textContent);
                     
                     itemRows.forEach(row => {
                         const itemTotal = parseFloat(row.querySelector('.item-total-display').textContent);
@@ -762,41 +800,32 @@
                             details: row.querySelector('.item-details').value.trim(),
                             quantity: parseFloat(row.querySelector('.item-quantity').value),
                             price_per_unit: parseFloat(row.querySelector('.item-price').value),
-                            total_cost: itemTotal, // Changed key to total_cost for consistency in receipt logic
+                            total_cost: itemTotal,
                         };
-                        
-                        // Final validation check before pushing
-                        if (!item.type || item.quantity <= 0 || item.price_per_unit < 0 || item.total_cost <= 0) {
-                            isValid = false;
-                        }
-                        
-                        if(isValid) {
-                            items.push(item);
-                        }
+                        items.push(item);
                     });
 
-                    if (!isValid || items.length === 0) {
-                        showFeedback('Please ensure all revenue items are valid and have a positive total cost.', 'error');
-                    } else {
-                        newRecord = {
-                            type: 'Revenue',
-                            items: items,
-                            total_cost: grandTotal,
-                            timestamp: new Date().toISOString()
-                        };
-                    }
+                    newRecord = {
+                        type: 'Revenue',
+                        items: items,
+                        total_cost: grandTotal,
+                        timestamp: new Date().toISOString()
+                    };
                 }
             } 
             // --- EXPENSE LOGIC ---
             else if (transactionType === 'Expense') {
-                const amount = parseFloat(expenseAmount.value);
-                const category = expenseCategory.value;
-                const description = expenseDescription.value.trim();
-
-                if (amount <= 0 || !category || !description) {
-                    showFeedback('Please provide a valid amount, category, and description for the expense.', 'error');
+                handleExpenseFormUpdate(); // Re-run validation one last time
+                
+                // Use the current button status which is set by handleExpenseFormUpdate
+                if (saveButton.disabled) {
+                    validationMessage = 'Please provide a valid Amount (> 0), select a Category, and enter a Description for the expense.';
                     isValid = false;
                 } else {
+                    const amount = parseFloat(expenseAmount.value);
+                    const category = expenseCategory.value;
+                    const description = expenseDescription.value.trim();
+                    
                     newRecord = {
                         type: 'Expense',
                         category: category,
@@ -809,7 +838,7 @@
 
 
             if (!isValid || !newRecord) {
-                // If invalid, the button will remain enabled (because of how submit works) but we stop the process.
+                showFeedback(`Validation Failed: ${validationMessage}`, 'error');
                 return;
             }
 
@@ -836,15 +865,19 @@
                 }
                 
                 // Reset total display and re-enable button via dynamic update
-                toggleFormFields(transactionType);
+                setTimeout(() => {
+                    spinner.classList.add('hidden');
+                    // Reset to the current type, which re-runs validation and re-enables the button if needed
+                    toggleFormFields(document.querySelector('input[name="transactionType"]:checked').value);
+                }, 100);
 
             } catch (error) {
-                console.error("Error adding document: ", error);
+                console.error("Error saving record: ", error);
                 showFeedback('Error saving record: ' + error.message, 'error');
-            } finally {
-                // Button text and spinner are managed by toggleFormFields after the save, 
-                // but we hide the spinner here just in case.
                 spinner.classList.add('hidden');
+                saveButton.disabled = false; // Re-enable if error occurs
+            } finally {
+                // Done in setTimeout above
             }
         });
 
@@ -855,8 +888,9 @@
             const recordId = e.currentTarget.getAttribute('data-id');
             if (!recordId) return;
 
-            // Simple confirmation logic (using window.confirm since alert/confirm are restricted)
-            if (window.confirm('Are you sure you want to delete this record?')) {
+            // Simple confirmation logic 
+            // Using a custom message box is preferred, but sticking to confirm() for quick reversion
+            if (confirm('Are you sure you want to delete this record?')) {
                 try {
                     deleteRecord(recordId);
                 } catch (error) {
